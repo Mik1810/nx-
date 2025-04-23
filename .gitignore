@@ -8,3 +8,4 @@ main
 *.app
 .vscode
 .*
+old/
