@@ -1,5 +1,5 @@
-#ifndef SIMPLEGRAPH_H
-#define SIMPLEGRAPH_H
+#ifndef NXPP_HPP
+#define NXPP_HPP
 
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/dijkstra_shortest_paths.hpp>
@@ -9,6 +9,16 @@
 #include <string>
 #include <iostream>
 #include <tuple>
+
+// Struttura Triple per rappresentare un arco pesato
+template <typename T1, typename T2, typename T3>
+struct EdgeTriple {
+    T1 first;
+    T2 second;
+    T3 weight;
+    
+    EdgeTriple(T1 f, T2 s, T3 w) : first(f), second(s), weight(w) {}
+};
 
 // Classe base per grafi semplici
 class SimpleGraph {
@@ -106,6 +116,23 @@ public:
         return result;
     }
 
+    // Metodo per l'ordinamento topologico
+    std::vector<Node> topological_sort() const {
+        std::vector<Node> result;
+        try {
+            // Utilizzo della funzione topological_sort di Boost
+            boost::topological_sort(g, std::back_inserter(result));
+            // Invertiamo l'ordine poiché boost::topological_sort 
+            // inserisce i nodi in ordine inverso
+            std::reverse(result.begin(), result.end());
+        } catch (boost::not_a_dag& e) {
+            std::cerr << "Error: Il grafo contiene cicli, impossibile effettuare l'ordinamento topologico.\n";
+            // Svuotiamo il risultato in caso di errore
+            result.clear();
+        }
+        return result;
+    }
+
 protected:
     GraphType g;
 };
@@ -161,14 +188,16 @@ protected:
 };
 
 // Template per grafi ponderati
-template <typename DirectedS, typename WeightType>
+template <typename DirectedS>
 class SimpleWeightedGraphBase {
 public:
+    using WeightType = double;
     using GraphType = boost::adjacency_list<boost::vecS, boost::vecS, DirectedS,
                                             boost::no_property, boost::property<boost::edge_weight_t, WeightType>>;
     using Node = typename boost::graph_traits<GraphType>::vertex_descriptor;
     using Edge = typename boost::graph_traits<GraphType>::edge_descriptor;
     using WeightMap = typename boost::property_map<GraphType, boost::edge_weight_t>::type;
+    using WeightedEdge = EdgeTriple<Node, Node, WeightType>;
 
     SimpleWeightedGraphBase() : g(), weight_map(boost::get(boost::edge_weight, g)) {}
     virtual ~SimpleWeightedGraphBase() {}
@@ -190,8 +219,8 @@ public:
     }
 
     void add_edges_from(const std::vector<std::tuple<Node, Node, WeightType>>& edges) {
-        for (const auto& [u, v, weight] : edges) {
-            add_edge(u, v, weight);
+        for (const auto& edge : edges) {
+            add_edge(std::get<0>(edge), std::get<1>(edge), std::get<2>(edge));
         }
     }
 
@@ -203,8 +232,8 @@ public:
         return result;
     }
 
-    std::vector<std::tuple<Node, Node, WeightType>> edges() const {
-        std::vector<std::tuple<Node, Node, WeightType>> result;
+    std::vector<WeightedEdge> edges() const {
+        std::vector<WeightedEdge> result;
         for (auto [e, eend] = boost::edges(g); e != eend; ++e) {
             result.emplace_back(boost::source(*e, g), boost::target(*e, g), weight_map[*e]);
         }
@@ -217,15 +246,38 @@ protected:
 };
 
 // Classe per grafi diretti ponderati
-template <typename WeightType>
-class SimpleWeightedDirectedGraph : public SimpleWeightedGraphBase<boost::directedS, WeightType> {};
+class SimpleWeightedDirectedGraph : public SimpleWeightedGraphBase<boost::directedS> {
+    public:
+        using Base = SimpleWeightedGraphBase<boost::directedS>;
+        using Node = typename Base::Node;
+    
+        // Metodo per l'ordinamento topologico
+        std::vector<Node> topological_sort() const {
+            std::vector<Node> result;
+            try {
+                // Utilizzo della funzione topological_sort di Boost
+                boost::topological_sort(this->g, std::back_inserter(result));
+                // Invertiamo l'ordine poiché boost::topological_sort 
+                // inserisce i nodi in ordine inverso
+                std::reverse(result.begin(), result.end());
+            } catch (const boost::not_a_dag& e) {
+                std::cerr << "Error: Il grafo contiene cicli, impossibile effettuare l'ordinamento topologico.\n";
+                // Svuotiamo il risultato in caso di errore
+                result.clear();
+            }
+            return result;
+        }
+};
 
 // Classe per grafi indiretti ponderati
-template <typename WeightType>
-class SimpleWeightedUndirectedGraph : public SimpleWeightedGraphBase<boost::undirectedS, WeightType> {};
+class SimpleWeightedUndirectedGraph : public SimpleWeightedGraphBase<boost::undirectedS> {
+    public:
+        using Base = SimpleWeightedGraphBase<boost::undirectedS>;
+        using Node = typename Base::Node;
+};
 
 // Alias per grafi non ponderati
 using SimpleUnweightedDirectedGraph = SimpleDirectedGraph;
 using SimpleUnweightedUndirectedGraph = SimpleUndirectedGraph;
 
-#endif // SIMPLEGRAPH_H
+#endif // NXPP_HPP
